@@ -1,17 +1,20 @@
 use bevy::prelude::*;
 use bevy::render::camera::ScalingMode;
-use rand::Rng;
+use pig::PigPlugin;
+use ui::GameUI;
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
+use bevy_inspector_egui::InspectorOptions;
+use bevy_inspector_egui::prelude::ReflectInspectorOptions;
+use bevy::input::common_conditions::input_toggle_active;
 
 
-#[derive(Component)]
+mod pig;
+mod ui;
+
+#[derive(Component, InspectorOptions, Default, Reflect)]
+#[reflect(Component, InspectorOptions)]
 pub struct Player {
   pub speed: f32,
-}
-
-#[derive(Component)]
-pub struct Pig {
-  pub lifetime: Timer,
-  pub movement_timer: Timer,
 }
 
 #[derive(Resource)]
@@ -35,6 +38,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
       ..default()
     },
     Player { speed: 100.0 },
+    Name::new("Player"),
   ));
 }
 
@@ -57,73 +61,7 @@ fn character_movement(
   }
 }
 
-fn spawn_pig(
-  mut commands: Commands,
-  asset_server: Res<AssetServer>,
-  input: Res<Input<KeyCode>>,
-  mut money: ResMut<Money>,
-  player: Query<&Transform, With<Player>>,
-) {
-    if !input.pressed(KeyCode::Space) {
-      return;
-    }
-    
-    let player_transform = player.single();
 
-    if money.0 >= 10.0 {
-      money.0 -= 10.0;
-      info!("Spent $10 dollars on a pig, remaining money is {}", money.0);
-
-      let texture = asset_server.load("pig.png");
-
-      commands.spawn((
-          SpriteBundle {
-            texture,
-            transform: *player_transform,
-            ..default()
-          },
-          Pig {
-            lifetime: Timer::from_seconds(2.0, TimerMode::Once),
-            lifetime: Timer.from_seconds(1.0, TimerMode::Repeating),
-          },
-      ));
-    }
-}
-
-fn pig_lifetime(
-  mut commands: Commands,
-  time: Res<Time>,
-  mut pigs: Query<(Entity, &mut Pig)>,
-  mut money: ResMut<Money>,
-) {
-  for (pig_entity, mut pig) in &mut pigs {
-    pig.lifetime.tick(time.delta());
-
-    if pig.lifetime.finished() {
-      money.0 += 15.0;
-
-      commands.entity(pig_entity).despawn();
-
-      info!("Pig sold for 15.0, current money is {}", money.0);
-    }
-  }
-}
-
-fn pig_random_movement(
-  mut pigs: Query<&mut Transform, &mut Pig>>,
-) {
-  let mut rng = rand::thread_rng();
-  for mut pig_transform, pig in &mut pigs {
-    pig.movement_timer.tick(time.delta());
-
-    if pig.movement_timer.finished {
-      pig_transform.translation.x += rng.gen_range(-5.0..5.0);
-      pig_transform.translation.y += rng.gen_range(-5.0..5.0);
-
-      pig.movement_timer.reset();
-    }
-  }
-}
 
 fn main() {
     App::new()
@@ -141,7 +79,11 @@ fn main() {
         .build(),
       )
       .insert_resource(Money(100.0))
+      .add_plugins((PigPlugin, GameUI))
+      .add_plugins(
+        WorldInspectorPlugin::default().run_if(input_toggle_active(true, KeyCode::Escape))
+      )
       .add_systems(Startup, setup)
-      .add_systems(Update, (character_movement, spawn_pig, (pig_random_movement,pig_lifetime).chain()))
+      .add_systems(Update, character_movement)
       .run();
 }
